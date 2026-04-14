@@ -1,0 +1,28 @@
+# 敏感配置
+scripts/config.json
+scripts/state.json
+
+# 音频文件（太大不入库）
+src/**/*.mp3
+src/**/*.wav
+src/**/*.m4a
+src/**/*.flac
+src/**/*.ogg
+
+# Python
+__pycache__/
+*.pyc
+
+# Obsidian 用户配置
+.obsidian/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 原始素材
+Karpathy*
+业务术语管理系统_需求文档.md
+
+# 导出文件
+*.xlsx
