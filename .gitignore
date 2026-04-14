@@ -13,8 +13,10 @@ src/**/*.ogg
 __pycache__/
 *.pyc
 
-# Obsidian 用户配置
+# Obsidian 用户配置和自动生成文件
 .obsidian/
+*.base
+termbase/
 
 # 系统文件
 .DS_Store

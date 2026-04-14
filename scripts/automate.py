@@ -11,6 +11,7 @@ import os
 import re
 import sys
 import glob
+import subprocess
 import smtplib
 import imaplib
 import email as email_lib
@@ -513,9 +514,65 @@ def run(config, state):
     state["last_run"] = today
     save_state(state)
 
+    # 自动推送到 GitHub
+    if total_added > 0 or total_changed > 0:
+        git_sync(added_count=total_added, changed_count=total_changed)
+
     print(f"\n{'='*50}")
     print(f"处理完成: 新增 {total_added} 条, 待审批 {total_changed} 条")
     print(f"{'='*50}\n")
+
+
+# ─── Git 同步 ──────────────────────────────────────────
+
+
+def git_sync(added_count=0, changed_count=0):
+    """自动 commit + push 到 GitHub"""
+    try:
+        repo_dir = str(BASE_DIR)
+
+        # 检查是否有远程仓库
+        result = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            capture_output=True, text=True, cwd=repo_dir
+        )
+        if result.returncode != 0:
+            print("[Git] 未配置远程仓库，跳过推送")
+            return
+
+        # git add
+        subprocess.run(["git", "add", "terms/", "src/"], cwd=repo_dir, check=True)
+
+        # 检查是否有变更
+        result = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=repo_dir
+        )
+        if result.returncode == 0:
+            print("[Git] 没有需要提交的变更")
+            return
+
+        # git commit
+        date_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+        msg = f"auto: {date_str} 新增{added_count}条"
+        if changed_count > 0:
+            msg += f", 待审批变更{changed_count}条"
+        subprocess.run(
+            ["git", "commit", "-m", msg],
+            cwd=repo_dir, check=True
+        )
+
+        # git push
+        subprocess.run(
+            ["git", "push", "origin", "HEAD"],
+            cwd=repo_dir, check=True
+        )
+        print(f"[Git] 已推送到 GitHub: {msg}")
+
+    except subprocess.CalledProcessError as e:
+        print(f"[Git 错误] {e}")
+    except Exception as e:
+        print(f"[Git 错误] {e}")
 
 
 # ─── 定时任务管理 ───────────────────────────────────────
