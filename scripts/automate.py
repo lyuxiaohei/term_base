@@ -130,17 +130,21 @@ def archive_source(file_path, state):
 EXTRACT_PROMPT = """你是一个业务术语提取专家。请从以下文本中提取所有业务术语。
 
 要求：
-1. 每个术语包含：name（术语名）、system（所属系统）、definition（定义）
+1. 每个术语包含：name（术语名）、system（所属系统）、definition（定义）、upstream（上游关联术语列表）、downstream（下游关联术语列表）、related（相关术语列表）
 2. system 必须是以下之一：供应链平台、电商平台、财务系统、人力资源、生产制造、其他
 3. definition 要清晰完整，基于文本内容归纳
-4. 返回 JSON 数组格式，不要其他内容
+4. upstream/downstream/related 填写已有的其他术语名，如果没有则填空数组 []
+5. 返回 JSON 数组格式，不要其他内容
+
+已有术语列表（供关联参考）：
+{existing_terms}
 
 文本：
 {text}"""
 
 
-def extract_terms_ai(text, config):
-    """调用 AI API 提取术语，返回列表 [{name, system, definition}]"""
+def extract_terms_ai(text, config, existing_terms=None):
+    """调用 AI API 提取术语，返回列表 [{name, system, definition, upstream, downstream, related}]"""
     ai = config.get("ai", {})
     api_key = ai.get("api_key", "")
     if not api_key:
@@ -150,6 +154,12 @@ def extract_terms_ai(text, config):
     url = f"{ai.get('base_url', 'https://api.openai.com/v1').rstrip('/')}/chat/completions"
     headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
 
+    # 构建已有术语名称列表供AI参考
+    if existing_terms:
+        term_names = ", ".join(sorted(existing_terms.keys()))
+    else:
+        term_names = "（暂无）"
+
     # 文本太长则截断
     max_chars = 12000
     truncated = text[:max_chars] + ("..." if len(text) > max_chars else "")
@@ -157,13 +167,13 @@ def extract_terms_ai(text, config):
     payload = {
         "model": ai.get("model", "gpt-4o-mini"),
         "messages": [
-            {"role": "user", "content": EXTRACT_PROMPT.format(text=truncated)}
+            {"role": "user", "content": EXTRACT_PROMPT.format(text=truncated, existing_terms=term_names)}
         ],
         "temperature": 0.1,
     }
 
     try:
-        resp = requests.post(url, headers=headers, json=payload, timeout=120)
+        resp = requests.post(url, headers=headers, json=payload, timeout=180)
         resp.raise_for_status()
         content = resp.json()["choices"][0]["message"]["content"]
 
@@ -222,7 +232,7 @@ def detect_changes(new_terms, existing_terms):
     return added, changed, unchanged
 
 
-def write_term_file(name, system, definition, source):
+def write_term_file(name, system, definition, source, upstream=None, downstream=None, related=None):
     """写入一个术语 Markdown 文件"""
     TERMS_DIR.mkdir(parents=True, exist_ok=True)
     safe_name = name.replace("/", "-").replace("\\", "-")
@@ -238,6 +248,24 @@ def write_term_file(name, system, definition, source):
                 old_meta = yaml.safe_load(parts[1]) or {}
                 created = old_meta.get("created", today)
 
+    # 构建关联部分
+    upstream = upstream or []
+    downstream = downstream or []
+    related = related or []
+
+    relation_lines = []
+    if upstream:
+        items = ", ".join(f"[[{t}]]" for t in upstream)
+        relation_lines.append(f"- 上游：{items}")
+    if downstream:
+        items = ", ".join(f"[[{t}]]" for t in downstream)
+        relation_lines.append(f"- 下游：{items}")
+    if related:
+        items = ", ".join(f"[[{t}]]" for t in related)
+        relation_lines.append(f"- 相关：{items}")
+    if not relation_lines:
+        relation_lines.append("-")
+
     content = f"""---
 system: "{system}"
 source: "{source}"
@@ -248,7 +276,7 @@ updated: "{today}"
 {definition}
 
 ## 关联
--
+{chr(10).join(relation_lines)}
 """
     with open(filepath, "w", encoding="utf-8") as f:
         f.write(content)
@@ -455,19 +483,28 @@ def run(config, state):
         print(f"\n--- 处理: {os.path.basename(file_path)} ---")
         source_name = os.path.basename(file_path)
 
-        # 转录
-        try:
-            text = transcribe(file_path)
-            print(f"  转录完成: {len(text)} 字")
-        except Exception as e:
-            print(f"  [转录失败] {e}")
-            continue
+        # 优先使用已有转录文本，避免重复转录
+        txt_name = os.path.splitext(os.path.basename(file_path))[0] + ".txt"
+        txt_path = PENDING_DIR / txt_name
+        if txt_path.exists():
+            with open(txt_path, "r", encoding="utf-8") as f:
+                text = f.read()
+            print(f"  使用已有转录: {len(text)} 字")
+        else:
+            # 转录
+            try:
+                text = transcribe(file_path)
+                print(f"  转录完成: {len(text)} 字")
+            except Exception as e:
+                print(f"  [转录失败] {e}")
+                continue
 
-        # 保存转录文本
-        save_transcription(file_path, text)
+            # 保存转录文本
+            save_transcription(file_path, text)
 
-        # AI 提取术语
-        terms = extract_terms_ai(text, config)
+        # AI 提取术语（传入已有术语供关联参考）
+        existing = load_existing_terms()
+        terms = extract_terms_ai(text, config, existing_terms=existing)
         if not terms:
             print("  [跳过] 未提取到术语")
             archive_source(file_path, state)
@@ -476,14 +513,18 @@ def run(config, state):
         print(f"  提取到 {len(terms)} 条术语")
 
         # 变更检测
-        existing = load_existing_terms()
         added, changed, unchanged = detect_changes(terms, existing)
 
         print(f"  新增: {len(added)}, 变更: {len(changed)}, 无变化: {len(unchanged)}")
 
         # 处理新增术语
         for term in added:
-            write_term_file(term["name"], term["system"], term["definition"], source_name)
+            write_term_file(
+                term["name"], term["system"], term["definition"], source_name,
+                upstream=term.get("upstream", []),
+                downstream=term.get("downstream", []),
+                related=term.get("related", []),
+            )
             print(f"  [新增] {term['name']}")
         total_added += len(added)
 
