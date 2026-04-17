@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from datetime import datetime
 
-TERMS_DIR = Path(__file__).parent.parent / "terms"
+TERMS_DIR = Path(__file__).parent.parent / "term_vault"
 
 REQUIRED_FIELDS = ["system", "created", "updated"]
 VALID_SYSTEMS = ["供应链平台", "电商平台", "财务系统", "人力资源", "生产制造", "其他"]

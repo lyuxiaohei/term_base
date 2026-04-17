@@ -11,7 +11,7 @@ term_base/                ← Obsidian 仓库 + Git 仓库
 ├── src/                  ← 源文件
 │   ├── pending/          ← 待处理（放入音频/文档，自动扫描）
 │   └── processed/        ← 已处理归档
-├── terms/                ← 术语库（每条术语一个 .md 文件，128条）
+├── term_vault/           ← 术语库（每条术语一个 .md 文件，128条）
 ├── templates/            ← 术语模板
 ├── views/                ← Dataview 视图页面
 │   ├── 首页.md           ← 入口导航
@@ -31,7 +31,7 @@ term_base/                ← Obsidian 仓库 + Git 仓库
 
 ## 术语文件格式
 
-每条术语 = `terms/<术语名>.md`：
+每条术语 = `term_vault/<术语名>.md`：
 
 ```markdown
 ---
@@ -60,7 +60,7 @@ updated: "YYYY-MM-DD"
 
 ```
 ① 放入音频 → ② 转录(whisper) → ③ AI提取术语(qwen3.5-plus)
-→ ④ 变更检测 → ⑤ 写入terms/ → ⑥ 邮件通知
+→ ④ 变更检测 → ⑤ 写入term_vault/ → ⑥ 邮件通知
 → ⑦ Git自动推送GitHub → ⑧ 记录操作日志
 ```
 

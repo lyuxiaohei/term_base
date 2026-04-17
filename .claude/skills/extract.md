@@ -1,6 +1,6 @@
 ---
 name: extract
-description: 解析 src/ 目录下的文档，提取业务术语并写入 terms/ 文件夹
+description: 解析 src/ 目录下的文档，提取业务术语并写入 term_vault/ 文件夹
 user_invocable: true
 ---
 
@@ -33,7 +33,7 @@ user_invocable: true
 - **关联术语**：如果内容中提到了其他术语，用 Obsidian 双链 `[[术语名]]` 标注关系
 
 ### 第四步：去重检测
-1. 扫描 `terms/` 下已有的 `.md` 文件（文件名即术语名）
+1. 扫描 `term_vault/` 下已有的 `.md` 文件（文件名即术语名）
 2. 将提取结果与已有术语对比
 3. 对每个术语标注状态：
    - **新增** — 术语库中不存在
@@ -43,7 +43,7 @@ user_invocable: true
 ### 第五步：写入文件
 对用户确认导入的术语，每个术语生成一个 Markdown 文件：
 
-**文件路径**：`terms/<术语名称>.md`
+**文件路径**：`term_vault/<术语名称>.md`
 
 **文件格式**（严格遵守）：
 ```

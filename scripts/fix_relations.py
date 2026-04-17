@@ -11,7 +11,7 @@ import requests
 import yaml
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TERMS_DIR = os.path.join(BASE_DIR, "terms")
+TERMS_DIR = os.path.join(BASE_DIR, "term_vault")
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 BATCH_SIZE = 15  # 每批发送给AI的术语数

@@ -40,7 +40,7 @@ except ImportError:
 
 # ─── 路径常量 ───────────────────────────────────────────
 BASE_DIR = Path(__file__).resolve().parent.parent
-TERMS_DIR = BASE_DIR / "terms"
+TERMS_DIR = BASE_DIR / "term_vault"
 PENDING_DIR = BASE_DIR / "src" / "pending"
 PROCESSED_DIR = BASE_DIR / "src" / "processed"
 CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
@@ -626,7 +626,7 @@ def git_sync(added_count=0, changed_count=0):
             return
 
         # git add
-        subprocess.run(["git", "add", "terms/", "src/"], cwd=repo_dir, check=True)
+        subprocess.run(["git", "add", "term_vault/", "src/"], cwd=repo_dir, check=True)
 
         # 检查是否有变更
         result = subprocess.run(
