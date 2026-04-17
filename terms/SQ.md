@@ -1,8 +1,9 @@
 ---
-system: "其他"
-source: "12-04 供应链系统优化与SPU-SKU重构.mp3"
-created: "2026-04-15"
-updated: "2026-04-15"
+created: '2026-04-15'
+en: sq
+source: 12-04 供应链系统优化与SPU-SKU重构.mp3
+system: 其他
+updated: '2026-04-15'
 ---
 
 与商品项目关联的唯一标识代码，可与通信商 SQ 建立单独关系，支持新建、修改及商务购买等操作。

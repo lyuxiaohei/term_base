@@ -47,6 +47,7 @@ CONFIG_PATH = Path(__file__).resolve().parent / "config.json"
 STATE_PATH = Path(__file__).resolve().parent / "state.json"
 
 SYSTEM_OPTIONS = ["供应链平台", "电商平台", "财务系统", "人力资源", "生产制造", "其他"]
+LOG_PATH = BASE_DIR / "log.md"
 
 # ─── 配置 & 状态管理 ─────────────────────────────────────
 
@@ -66,6 +67,16 @@ def load_state():
 def save_state(state):
     with open(STATE_PATH, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def append_log(title, detail_lines):
+    """追加操作日志到 log.md"""
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    entry = f"\n### {now} - {title}\n"
+    for line in detail_lines:
+        entry += f"- {line}\n"
+    with open(LOG_PATH, "a", encoding="utf-8") as f:
+        f.write(entry)
 
 
 # ─── 模块1: 扫描与转录 ─────────────────────────────────
@@ -130,11 +141,12 @@ def archive_source(file_path, state):
 EXTRACT_PROMPT = """你是一个业务术语提取专家。请从以下文本中提取所有业务术语。
 
 要求：
-1. 每个术语包含：name（术语名）、system（所属系统）、definition（定义）、upstream（上游关联术语列表）、downstream（下游关联术语列表）、related（相关术语列表）
+1. 每个术语包含：name（术语名）、en（英文命名，驼峰或下划线风格，如 spuSkuManagement 或 product_listing）、system（所属系统）、definition（定义）、upstream（上游关联术语列表）、downstream（下游关联术语列表）、related（相关术语列表）
 2. system 必须是以下之一：供应链平台、电商平台、财务系统、人力资源、生产制造、其他
 3. definition 要清晰完整，基于文本内容归纳
-4. upstream/downstream/related 填写已有的其他术语名，如果没有则填空数组 []
-5. 返回 JSON 数组格式，不要其他内容
+4. en 要简洁专业，便于研发命名使用
+5. upstream/downstream/related 填写已有的其他术语名，如果没有则填空数组 []
+6. 返回 JSON 数组格式，不要其他内容
 
 已有术语列表（供关联参考）：
 {existing_terms}
@@ -232,21 +244,26 @@ def detect_changes(new_terms, existing_terms):
     return added, changed, unchanged
 
 
-def write_term_file(name, system, definition, source, upstream=None, downstream=None, related=None):
+def write_term_file(name, system, definition, source, upstream=None, downstream=None, related=None, en=None):
     """写入一个术语 Markdown 文件"""
     TERMS_DIR.mkdir(parents=True, exist_ok=True)
     safe_name = name.replace("/", "-").replace("\\", "-")
     filepath = TERMS_DIR / f"{safe_name}.md"
     today = datetime.now().strftime("%Y-%m-%d")
 
-    # 如果已存在，保留 created
+    # 如果已存在，保留 created 和 en
     created = today
+    old_en = None
     if filepath.exists():
         with open(filepath, "r", encoding="utf-8") as f:
             parts = f.read().split("---", 2)
             if len(parts) >= 3:
                 old_meta = yaml.safe_load(parts[1]) or {}
                 created = old_meta.get("created", today)
+                old_en = old_meta.get("en", None)
+
+    # en 优先用传入值，其次保留旧值
+    en_value = en or old_en or ""
 
     # 构建关联部分
     upstream = upstream or []
@@ -268,6 +285,7 @@ def write_term_file(name, system, definition, source, upstream=None, downstream=
 
     content = f"""---
 system: "{system}"
+en: "{en_value}"
 source: "{source}"
 created: "{created}"
 updated: "{today}"
@@ -459,6 +477,7 @@ def check_email_replies(config, state):
 
 def run(config, state):
     """执行一次完整的自动化流程"""
+    skip_approve = config.get("skip_approve", False)
     today = datetime.now().strftime("%Y-%m-%d %H:%M")
     print(f"\n{'='*50}")
     print(f"术语库自动化 - {today}")
@@ -524,23 +543,38 @@ def run(config, state):
                 upstream=term.get("upstream", []),
                 downstream=term.get("downstream", []),
                 related=term.get("related", []),
+                en=term.get("en", ""),
             )
             print(f"  [新增] {term['name']}")
         total_added += len(added)
 
-        # 处理变更术语 → 写入 pending
-        for term in changed:
-            change_id = f"{term['name']}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
-            state["pending_changes"][change_id] = {
-                "name": term["name"],
-                "system": term["system"],
-                "definition": term["definition"],
-                "old_definition": term["old_definition"],
-                "source": source_name,
-                "date": today,
-            }
-            print(f"  [待审批] {term['name']}")
-        total_changed += len(changed)
+        # 处理变更术语
+        if skip_approve:
+            # 跳过审批，直接更新
+            for term in changed:
+                write_term_file(
+                    term["name"], term["system"], term["definition"], source_name,
+                    upstream=term.get("upstream", []),
+                    downstream=term.get("downstream", []),
+                    related=term.get("related", []),
+                    en=term.get("en", ""),
+                )
+                print(f"  [已更新] {term['name']}（跳过审批）")
+            total_changed += len(changed)
+        else:
+            # 写入 pending 等审批
+            for term in changed:
+                change_id = f"{term['name']}_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+                state["pending_changes"][change_id] = {
+                    "name": term["name"],
+                    "system": term["system"],
+                    "definition": term["definition"],
+                    "old_definition": term["old_definition"],
+                    "source": source_name,
+                    "date": today,
+                }
+                print(f"  [待审批] {term['name']}")
+            total_changed += len(changed)
 
         # 归档源文件
         archive_source(file_path, state)
@@ -562,6 +596,16 @@ def run(config, state):
     print(f"\n{'='*50}")
     print(f"处理完成: 新增 {total_added} 条, 待审批 {total_changed} 条")
     print(f"{'='*50}\n")
+
+    # 追加操作日志
+    log_lines = [f"处理 {len(new_files)} 个文件"]
+    if total_added:
+        log_lines.append(f"新增 {total_added} 条术语")
+    if total_changed:
+        log_lines.append(f"待审批变更 {total_changed} 条")
+    if not total_added and not total_changed:
+        log_lines.append("无新增或变更")
+    append_log("自动运行", log_lines)
 
 
 # ─── Git 同步 ──────────────────────────────────────────
